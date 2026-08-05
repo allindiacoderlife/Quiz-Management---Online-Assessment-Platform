@@ -4,6 +4,7 @@ import cors from "cors";
 import { config } from "./config/app.config.js";
 import { asyncHandler } from "./utils/asyncHandler.js";
 import { errorHandler } from "./middleware/errorHandler.js";
+import apiRouter from "./routes/index.js";
 
 const PORT = config.port || 8000;
 
@@ -54,6 +55,9 @@ app.get(
     });
   }),
 );
+
+//! ─── API Routes ────────────────────────────────────────────
+app.use("/api", apiRouter);
 
 //! ─── Error Handler ────────────────────────────────────────────
 app.use(errorHandler);

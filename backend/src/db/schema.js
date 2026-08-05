@@ -43,6 +43,9 @@ export const users = pgTable("users", {
   email: varchar("email", { length: 255 }).notNull().unique(),
   password: text("password").notNull(),
   role: roleEnum("role").default("STUDENT").notNull(),
+  otp: integer("otp"),
+  otpExpiresAt: timestamp("otp_expires_at"),
+  isVerified: boolean("is_verified").default(false).notNull(),
   status: userStatusEnum("status").default("ACTIVE").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
