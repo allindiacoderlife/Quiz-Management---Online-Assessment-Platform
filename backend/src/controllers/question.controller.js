@@ -1,5 +1,5 @@
 import { db } from "../lib/db.js";
-import { questions, options, quizzes } from "../db/schema.js";
+import { questions, options, quizzes, testCases } from "../db/schema.js";
 import { eq, inArray } from "drizzle-orm";
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
@@ -24,16 +24,19 @@ export const getQuizQuestions = asyncHandler(async (req, res) => {
   const questionIds = qList.map((q) => q.id);
 
   let optsList = [];
+  let casesList = [];
   if (questionIds.length > 0) {
-    optsList = await db
-      .select()
-      .from(options)
-      .where(inArray(options.questionId, questionIds));
+    [optsList, casesList] = await Promise.all([
+      db.select().from(options).where(inArray(options.questionId, questionIds)),
+      db.select().from(testCases).where(inArray(testCases.questionId, questionIds)),
+    ]);
   }
 
   const structuredQuestions = qList.map((q) => ({
     ...q,
+    codingTemplate: q.codingTemplate ? JSON.parse(q.codingTemplate) : null,
     options: optsList.filter((o) => o.questionId === q.id),
+    testCases: casesList.filter((tc) => tc.questionId === q.id),
   }));
 
   res.status(200).json({ success: true, data: structuredQuestions });
@@ -46,20 +49,28 @@ export const createQuestion = asyncHandler(async (req, res) => {
     marks = 1,
     explanation,
     difficulty = "INTERMEDIATE",
+    type = "MCQ",
+    codingTemplate,
     optionsList,
+    testCasesList,
   } = req.body;
 
   if (!questionText || questionText.trim() === "") {
     throw new ApiError(400, "Question text is required");
   }
 
-  if (!optionsList || !Array.isArray(optionsList) || optionsList.length < 2) {
-    throw new ApiError(400, "At least two options are required");
-  }
-
-  const correctOpts = optionsList.filter((o) => o.isCorrect === true || o.isCorrect === "true");
-  if (correctOpts.length !== 1) {
-    throw new ApiError(400, "Exactly one option must be marked as correct");
+  if (type === "CODING") {
+    if (!testCasesList || !Array.isArray(testCasesList) || testCasesList.length === 0) {
+      throw new ApiError(400, "At least one test case is required for coding questions");
+    }
+  } else {
+    if (!optionsList || !Array.isArray(optionsList) || optionsList.length < 2) {
+      throw new ApiError(400, "At least two options are required for MCQ questions");
+    }
+    const correctOpts = optionsList.filter((o) => o.isCorrect === true || o.isCorrect === "true");
+    if (correctOpts.length !== 1) {
+      throw new ApiError(400, "Exactly one option must be marked as correct");
+    }
   }
 
   const [quiz] = await db
@@ -80,23 +91,44 @@ export const createQuestion = asyncHandler(async (req, res) => {
         marks,
         explanation,
         difficulty,
+        type,
+        codingTemplate: codingTemplate ? JSON.stringify(codingTemplate) : null,
       })
       .returning();
 
-    const formattedOptions = optionsList.map((o) => ({
-      questionId: newQuestion.id,
-      optionText: o.optionText,
-      isCorrect: !!o.isCorrect,
-    }));
+    let newOptions = [];
+    let newTestCases = [];
 
-    const newOptions = await tx
-      .insert(options)
-      .values(formattedOptions)
-      .returning();
+    if (type === "CODING") {
+      const formattedTestCases = testCasesList.map((tc) => ({
+        questionId: newQuestion.id,
+        input: tc.input || "",
+        expectedOutput: tc.expectedOutput || "",
+        isSample: !!tc.isSample,
+      }));
+
+      newTestCases = await tx
+        .insert(testCases)
+        .values(formattedTestCases)
+        .returning();
+    } else {
+      const formattedOptions = optionsList.map((o) => ({
+        questionId: newQuestion.id,
+        optionText: o.optionText,
+        isCorrect: !!o.isCorrect,
+      }));
+
+      newOptions = await tx
+        .insert(options)
+        .values(formattedOptions)
+        .returning();
+    }
 
     return {
       ...newQuestion,
+      codingTemplate: newQuestion.codingTemplate ? JSON.parse(newQuestion.codingTemplate) : null,
       options: newOptions,
+      testCases: newTestCases,
     };
   });
 
@@ -109,7 +141,16 @@ export const createQuestion = asyncHandler(async (req, res) => {
 
 export const updateQuestion = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { questionText, marks, explanation, difficulty, optionsList } = req.body;
+  const { 
+    questionText, 
+    marks, 
+    explanation, 
+    difficulty, 
+    type,
+    codingTemplate,
+    optionsList, 
+    testCasesList 
+  } = req.body;
 
   const [existingQ] = await db
     .select()
@@ -120,13 +161,21 @@ export const updateQuestion = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Question not found");
   }
 
-  if (optionsList) {
-    if (!Array.isArray(optionsList) || optionsList.length < 2) {
-      throw new ApiError(400, "At least two options are required");
+  const qType = type || existingQ.type;
+
+  if (qType === "CODING") {
+    if (testCasesList && (!Array.isArray(testCasesList) || testCasesList.length === 0)) {
+      throw new ApiError(400, "At least one test case is required for coding questions");
     }
-    const correctOpts = optionsList.filter((o) => o.isCorrect === true || o.isCorrect === "true");
-    if (correctOpts.length !== 1) {
-      throw new ApiError(400, "Exactly one option must be marked as correct");
+  } else {
+    if (optionsList) {
+      if (!Array.isArray(optionsList) || optionsList.length < 2) {
+        throw new ApiError(400, "At least two options are required");
+      }
+      const correctOpts = optionsList.filter((o) => o.isCorrect === true || o.isCorrect === "true");
+      if (correctOpts.length !== 1) {
+        throw new ApiError(400, "Exactly one option must be marked as correct");
+      }
     }
   }
 
@@ -138,34 +187,69 @@ export const updateQuestion = asyncHandler(async (req, res) => {
         ...(marks !== undefined && { marks }),
         ...(explanation !== undefined && { explanation }),
         ...(difficulty && { difficulty }),
+        ...(type && { type }),
+        codingTemplate: codingTemplate ? JSON.stringify(codingTemplate) : (type === "MCQ" ? null : undefined),
       })
       .where(eq(questions.id, id))
       .returning();
 
     let updatedOptions = [];
-    if (optionsList) {
+    let updatedTestCases = [];
+
+    if (qType === "CODING") {
+      // Clear options and write test cases
       await tx.delete(options).where(eq(options.questionId, id));
+      
+      if (testCasesList) {
+        await tx.delete(testCases).where(eq(testCases.questionId, id));
 
-      const formattedOptions = optionsList.map((o) => ({
-        questionId: id,
-        optionText: o.optionText,
-        isCorrect: !!o.isCorrect,
-      }));
+        const formattedTestCases = testCasesList.map((tc) => ({
+          questionId: id,
+          input: tc.input || "",
+          expectedOutput: tc.expectedOutput || "",
+          isSample: !!tc.isSample,
+        }));
 
-      updatedOptions = await tx
-        .insert(options)
-        .values(formattedOptions)
-        .returning();
+        updatedTestCases = await tx
+          .insert(testCases)
+          .values(formattedTestCases)
+          .returning();
+      } else {
+        updatedTestCases = await tx
+          .select()
+          .from(testCases)
+          .where(eq(testCases.questionId, id));
+      }
     } else {
-      updatedOptions = await tx
-        .select()
-        .from(options)
-        .where(eq(options.questionId, id));
+      // Clear test cases and write options
+      await tx.delete(testCases).where(eq(testCases.questionId, id));
+
+      if (optionsList) {
+        await tx.delete(options).where(eq(options.questionId, id));
+
+        const formattedOptions = optionsList.map((o) => ({
+          questionId: id,
+          optionText: o.optionText,
+          isCorrect: !!o.isCorrect,
+        }));
+
+        updatedOptions = await tx
+          .insert(options)
+          .values(formattedOptions)
+          .returning();
+      } else {
+        updatedOptions = await tx
+          .select()
+          .from(options)
+          .where(eq(options.questionId, id));
+      }
     }
 
     return {
       ...updatedQuestion,
+      codingTemplate: updatedQuestion.codingTemplate ? JSON.parse(updatedQuestion.codingTemplate) : null,
       options: updatedOptions,
+      testCases: updatedTestCases,
     };
   });
 

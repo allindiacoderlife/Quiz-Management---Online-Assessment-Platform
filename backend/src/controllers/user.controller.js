@@ -3,6 +3,8 @@ import { users, attempts, quizzes } from "../db/schema.js";
 import { eq, like, or, and } from "drizzle-orm";
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import bcrypt from "bcryptjs";
+import { sendWelcomeEmail } from "../services/email.service.js";
 
 export const getUsers = asyncHandler(async (req, res) => {
   const { search, role, status } = req.query;
@@ -188,5 +190,62 @@ export const deleteUser = asyncHandler(async (req, res) => {
     success: true,
     message: "User deleted successfully",
     data: deletedUser,
+  });
+});
+
+export const createUser = asyncHandler(async (req, res) => {
+  const { name, email, password, role = "STUDENT" } = req.body;
+
+  if (!name || !email || !password) {
+    throw new ApiError(400, "Name, email, and password fields are required");
+  }
+
+  // Check duplicate email
+  const [existingUser] = await db
+    .select()
+    .from(users)
+    .where(eq(users.email, email.trim().toLowerCase()));
+
+  if (existingUser) {
+    throw new ApiError(400, "Email address is already registered");
+  }
+
+  // Hash password
+  const salt = await bcrypt.genSalt(10);
+  const hashedPassword = await bcrypt.hash(password, salt);
+
+  const [newUser] = await db
+    .insert(users)
+    .values({
+      name: name.trim(),
+      email: email.trim().toLowerCase(),
+      password: hashedPassword,
+      role,
+      isVerified: true, // Pre-verified since created by admin
+      status: "ACTIVE",
+      mustChangePassword: true, // Force change on first login
+    })
+    .returning({
+      id: users.id,
+      name: users.name,
+      email: users.email,
+      role: users.role,
+      status: users.status,
+      isVerified: users.isVerified,
+      mustChangePassword: users.mustChangePassword,
+      createdAt: users.createdAt,
+    });
+
+  // Dispatch Welcome email containing credentials in background
+  try {
+    await sendWelcomeEmail(email.trim().toLowerCase(), name.trim(), password);
+  } catch (err) {
+    console.error("Welcome email delivery failed:", err);
+  }
+
+  res.status(201).json({
+    success: true,
+    message: "User account created successfully by administrator",
+    data: newUser,
   });
 });

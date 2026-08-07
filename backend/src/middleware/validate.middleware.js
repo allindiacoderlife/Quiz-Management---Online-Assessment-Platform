@@ -21,10 +21,22 @@ export const validate = (schema) => (req, _res, next) => {
       throw new ApiError(400, "Request validation failed", errorDetails);
     }
 
-    // Re-assign validated and structured data back to express req object
-    req.body = parsed.data.body;
-    req.query = parsed.data.query;
-    req.params = parsed.data.params;
+    // Re-assign validated and structured data back to express req object safely
+    if (parsed.data.body !== undefined) {
+      req.body = parsed.data.body;
+    }
+    if (parsed.data.query !== undefined) {
+      for (const key in req.query) {
+        delete req.query[key];
+      }
+      Object.assign(req.query, parsed.data.query);
+    }
+    if (parsed.data.params !== undefined) {
+      for (const key in req.params) {
+        delete req.params[key];
+      }
+      Object.assign(req.params, parsed.data.params);
+    }
     next();
   } catch (error) {
     next(error);

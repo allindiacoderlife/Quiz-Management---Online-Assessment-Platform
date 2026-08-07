@@ -136,6 +136,7 @@ export const loginUser = asyncHandler(async (req, res) => {
         email: user.email,
         role: user.role,
         status: user.status,
+        mustChangePassword: user.mustChangePassword,
         createdAt: user.createdAt,
       },
     },
@@ -332,5 +333,32 @@ export const getMe = asyncHandler(async (req, res) => {
     data: {
       user: req.user,
     },
+  });
+});
+
+export const changePassword = asyncHandler(async (req, res) => {
+  const { newPassword } = req.body;
+  const userId = req.user.id;
+
+  if (!newPassword || newPassword.length < 6) {
+    throw new ApiError(400, "New password must be at least 6 characters long");
+  }
+
+  // Hash new password
+  const salt = await bcrypt.genSalt(10);
+  const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+  // Update password in db and clear mustChangePassword flag
+  await db
+    .update(users)
+    .set({
+      password: hashedPassword,
+      mustChangePassword: false,
+    })
+    .where(eq(users.id, userId));
+
+  res.status(200).json({
+    success: true,
+    message: "Password updated successfully. You can now use the application.",
   });
 });

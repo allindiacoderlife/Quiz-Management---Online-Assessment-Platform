@@ -98,3 +98,25 @@ export const sendResetPasswordEmail = async (to, otp) => {
   `;
   return sendEmail({ to, subject, html });
 };
+
+/**
+ * Send welcome email to new students created by admin
+ * @param {string} to
+ * @param {string} name
+ * @param {string} password
+ */
+export const sendWelcomeEmail = async (to, name, password) => {
+  const subject = "Welcome to QuizArena! Your Account Credentials";
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
+      <h2 style="color: #4F46E5; text-align: center;">Welcome to QuizArena, ${name}!</h2>
+      <p>Your account has been created by the administrator. Here are your login credentials:</p>
+      <div style="background-color: #F3F4F6; padding: 15px; border-radius: 5px; margin: 20px 0; color: #1F2937;">
+        <p style="margin: 5px 0;"><strong>Email / Username:</strong> ${to}</p>
+        <p style="margin: 5px 0;"><strong>Temporary Password:</strong> ${password}</p>
+      </div>
+      <p style="color: #6B7280; font-size: 14px;"><strong>Important:</strong> You will be required to create a new password upon your first login to secure your account.</p>
+    </div>
+  `;
+  return sendEmail({ to, subject, html });
+};

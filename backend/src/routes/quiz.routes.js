@@ -10,7 +10,7 @@ import {
   deleteQuiz,
   publishQuiz,
 } from "../controllers/quiz.controller.js";
-import { startAttempt, submitAttempt } from "../controllers/attempt.controller.js";
+import { startAttempt, submitAttempt, runCodeAgainstSamples } from "../controllers/attempt.controller.js";
 
 const router = Router();
 
@@ -89,8 +89,20 @@ const submitAttemptSchema = z.object({
           .uuid("Option ID must be a valid UUID")
           .nullable()
           .optional(),
+        submittedCode: z.string().nullable().optional(),
+        submittedLanguage: z.string().max(50).nullable().optional(),
       })
     ),
+  }),
+});
+
+const runCodeSchema = z.object({
+  body: z.object({
+    questionId: z
+      .string({ required_error: "Question ID is required" })
+      .uuid("Question ID must be a valid UUID"),
+    code: z.string({ required_error: "Source code is required" }),
+    language: z.string({ required_error: "Language is required" }),
   }),
 });
 
@@ -100,8 +112,9 @@ router.use(protect);
 router.get("/", getQuizzes);
 router.get("/:id", getQuizById);
 
-// Attempt start & submit endpoints (Students/Admins)
+// Attempt start, run code, & submit endpoints (Students/Admins)
 router.post("/:quizId/start", startAttempt);
+router.post("/:quizId/run", validate(runCodeSchema), runCodeAgainstSamples);
 router.post("/:quizId/submit", validate(submitAttemptSchema), submitAttempt);
 
 // Admin-only CRUD operations

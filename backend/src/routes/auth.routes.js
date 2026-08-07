@@ -8,6 +8,7 @@ import {
   forgotPassword,
   resetPassword,
   getMe,
+  changePassword,
 } from "../controllers/auth.controller.js";
 import { validate } from "../middleware/validate.middleware.js";
 import { protect } from "../middleware/auth.middleware.js";
@@ -111,5 +112,6 @@ router.post("/reset-password", validate(resetPasswordSchema), resetPassword);
 
 // Protected routes
 router.get("/me", protect, getMe);
+router.post("/change-password", protect, changePassword);
 
 export default router;

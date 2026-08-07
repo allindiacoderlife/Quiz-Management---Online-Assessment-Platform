@@ -32,6 +32,7 @@ export const attemptStatusEnum = pgEnum("attempt_status", [
   "FAILED",
   "IN_PROGRESS",
 ]);
+export const questionTypeEnum = pgEnum("question_type", ["MCQ", "CODING"]);
 
 // ==========================================
 // TABLES
@@ -47,6 +48,7 @@ export const users = pgTable("users", {
   otpExpiresAt: timestamp("otp_expires_at"),
   isVerified: boolean("is_verified").default(false).notNull(),
   status: userStatusEnum("status").default("ACTIVE").notNull(),
+  mustChangePassword: boolean("must_change_password").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -82,6 +84,8 @@ export const questions = pgTable("questions", {
   marks: integer("marks").default(1).notNull(),
   explanation: text("explanation"),
   difficulty: difficultyEnum("difficulty").default("INTERMEDIATE").notNull(),
+  type: questionTypeEnum("type").default("MCQ").notNull(),
+  codingTemplate: text("coding_template"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -92,6 +96,17 @@ export const options = pgTable("options", {
     .notNull(),
   optionText: text("option_text").notNull(),
   isCorrect: boolean("is_correct").default(false).notNull(),
+});
+
+export const testCases = pgTable("test_cases", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  questionId: uuid("question_id")
+    .references(() => questions.id, { onDelete: "cascade" })
+    .notNull(),
+  input: text("input").notNull(),
+  expectedOutput: text("expected_output").notNull(),
+  isSample: boolean("is_sample").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 export const attempts = pgTable("attempts", {
@@ -126,6 +141,10 @@ export const answers = pgTable("answers", {
     onDelete: "set null",
   }),
   isCorrect: boolean("is_correct").notNull(),
+  submittedCode: text("submitted_code"),
+  submittedLanguage: varchar("submitted_language", { length: 50 }),
+  passedCount: integer("passed_count"),
+  totalCount: integer("total_count"),
 });
 
 // ==========================================
@@ -155,11 +174,19 @@ export const questionsRelations = relations(questions, ({ one, many }) => ({
     references: [quizzes.id],
   }),
   options: many(options),
+  testCases: many(testCases),
 }));
 
 export const optionsRelations = relations(options, ({ one }) => ({
   question: one(questions, {
     fields: [options.questionId],
+    references: [questions.id],
+  }),
+}));
+
+export const testCasesRelations = relations(testCases, ({ one }) => ({
+  question: one(questions, {
+    fields: [testCases.questionId],
     references: [questions.id],
   }),
 }));
