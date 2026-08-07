@@ -1,122 +1,152 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import React from "react";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider } from "./context/auth.context.jsx";
+import Layout from "./components/Layout.jsx";
+import ProtectedRoute from "./components/ProtectedRoute.jsx";
+
+// Student / Public Pages
+import Landing from "./pages/Landing.jsx";
+import Login from "./pages/Login.jsx";
+import Register from "./pages/Register.jsx";
+import ForgotPassword from "./pages/ForgotPassword.jsx";
+import ResetPassword from "./pages/ResetPassword.jsx";
+import StudentDashboard from "./pages/StudentDashboard.jsx";
+import QuizDetails from "./pages/QuizDetails.jsx";
+import QuizSession from "./pages/QuizSession.jsx";
+import QuizResult from "./pages/QuizResult.jsx";
+import Leaderboard from "./pages/Leaderboard.jsx";
+import ChangePassword from "./pages/ChangePassword.jsx";
+
+// Admin-Only Pages
+import AdminDashboard from "./pages/AdminDashboard.jsx";
+import AdminUsers from "./pages/AdminUsers.jsx";
+import AdminCategories from "./pages/AdminCategories.jsx";
+import AdminQuizzes from "./pages/AdminQuizzes.jsx";
+import AdminQuestions from "./pages/AdminQuestions.jsx";
 
 function App() {
-  const [count, setCount] = useState(0)
-
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <BrowserRouter>
+      <AuthProvider>
+        <Layout>
+          <Routes>
+            {/* Public Auth routes */}
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
 
-      <div className="ticks"></div>
+            {/* Student & Shared Protected Routes */}
+            <Route
+              path="/"
+              element={
+                <ProtectedRoute allowedRoles={["STUDENT"]}>
+                  <Landing />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute allowedRoles={["STUDENT"]}>
+                  <StudentDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/quizzes/:id"
+              element={
+                <ProtectedRoute allowedRoles={["STUDENT"]}>
+                  <QuizDetails />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/quizzes/:id/session"
+              element={
+                <ProtectedRoute allowedRoles={["STUDENT"]}>
+                  <QuizSession />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/attempts/:id"
+              element={
+                <ProtectedRoute allowedRoles={["STUDENT", "ADMIN"]}>
+                  <QuizResult />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/leaderboard"
+              element={
+                <ProtectedRoute allowedRoles={["STUDENT"]}>
+                  <Leaderboard />
+                </ProtectedRoute>
+              }
+            />
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+            {/* Admin-Only Protected Routes */}
+            <Route
+              path="/admin"
+              element={
+                <ProtectedRoute allowedRoles={["ADMIN"]}>
+                  <AdminDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/users"
+              element={
+                <ProtectedRoute allowedRoles={["ADMIN"]}>
+                  <AdminUsers />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/categories"
+              element={
+                <ProtectedRoute allowedRoles={["ADMIN"]}>
+                  <AdminCategories />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/quizzes"
+              element={
+                <ProtectedRoute allowedRoles={["ADMIN"]}>
+                  <AdminQuizzes />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/quizzes/:quizId/questions"
+              element={
+                <ProtectedRoute allowedRoles={["ADMIN"]}>
+                  <AdminQuestions />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/questions"
+              element={
+                <ProtectedRoute allowedRoles={["ADMIN"]}>
+                  <Navigate to="/admin/quizzes" replace />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/change-password"
+              element={<ChangePassword />}
+            />
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+            {/* Fallback redirect */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Layout>
+      </AuthProvider>
+    </BrowserRouter>
+  );
 }
 
-export default App
+export default App;
