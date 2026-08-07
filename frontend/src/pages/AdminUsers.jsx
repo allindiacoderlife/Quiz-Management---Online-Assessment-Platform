@@ -2,6 +2,15 @@ import React, { useState, useEffect } from "react";
 import api from "../services/api.js";
 import { Search, UserCheck, UserX, Trash2, Eye, X, BookOpen, Award, CheckCircle, Users, Plus, AlertCircle } from "lucide-react";
 
+const generateTempPassword = () => {
+  const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$";
+  let pass = "";
+  for (let i = 0; i < 8; i++) {
+    pass += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return pass;
+};
+
 export const AdminUsers = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -24,7 +33,7 @@ export const AdminUsers = () => {
   const handleOpenAddModal = () => {
     setAddName("");
     setAddEmail("");
-    setAddPassword("");
+    setAddPassword(generateTempPassword());
     setAddError("");
     setShowAddModal(true);
   };
@@ -391,17 +400,27 @@ export const AdminUsers = () => {
 
               {/* Password */}
               <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">Account Password</label>
-                <input
-                  type="password"
-                  placeholder="••••••••"
-                  value={addPassword}
-                  onChange={(e) => setAddPassword(e.target.value)}
-                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-850 focus:border-indigo-500 focus:outline-none"
-                  required
-                  minLength={6}
-                  disabled={adding}
-                />
+                <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">Temporary Password</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Temporary password"
+                    value={addPassword}
+                    onChange={(e) => setAddPassword(e.target.value)}
+                    className="flex-1 rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-850 focus:border-indigo-500 focus:outline-none font-mono"
+                    required
+                    minLength={6}
+                    disabled={adding}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setAddPassword(generateTempPassword())}
+                    className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 transition-colors shrink-0"
+                    disabled={adding}
+                  >
+                    Regenerate
+                  </button>
+                </div>
               </div>
 
               {/* Action buttons */}

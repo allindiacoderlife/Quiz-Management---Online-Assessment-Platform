@@ -65,16 +65,18 @@ export const Login = () => {
   return (
     <div className="flex min-h-[80svh] items-center justify-center py-10">
       <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl md:p-8">
-        
         {/* OTP Verification Block */}
         {showOtpScreen ? (
           <div>
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-indigo-100 text-indigo-700">
               <KeyRound className="h-6 w-6" />
             </div>
-            <h2 className="mt-4 text-center text-2xl font-bold text-slate-900">Verify Email</h2>
+            <h2 className="mt-4 text-center text-2xl font-bold text-slate-900">
+              Verify Email
+            </h2>
             <p className="mt-2 text-center text-sm text-slate-500">
-              We've sent a 6-digit verification code to <span className="font-semibold text-slate-800">{otpEmail}</span>.
+              We've sent a 6-digit verification code to{" "}
+              <span className="font-semibold text-slate-800">{otpEmail}</span>.
             </p>
 
             {otpError && (
@@ -83,15 +85,22 @@ export const Login = () => {
               </div>
             )}
 
-            <form onSubmit={handleOtpSubmit} className="mt-6 flex flex-col gap-4">
+            <form
+              onSubmit={handleOtpSubmit}
+              className="mt-6 flex flex-col gap-4"
+            >
               <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">OTP Code</label>
+                <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  OTP Code
+                </label>
                 <input
                   type="text"
                   maxLength={6}
                   placeholder="123456"
                   value={otpCode}
-                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
+                  onChange={(e) =>
+                    setOtpCode(e.target.value.replace(/\D/g, ""))
+                  }
                   className="rounded-lg border border-slate-200 px-4 py-3 text-center text-xl font-bold tracking-widest text-slate-900 placeholder-slate-300 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
                   required
                 />
@@ -124,7 +133,9 @@ export const Login = () => {
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-indigo-100 text-indigo-700">
               <ShieldCheck className="h-6 w-6" />
             </div>
-            <h2 className="mt-4 text-center text-2xl font-bold text-slate-900">Welcome Back</h2>
+            <h2 className="mt-4 text-center text-2xl font-bold text-slate-900">
+              Welcome Back
+            </h2>
             <p className="mt-1 text-center text-sm text-slate-500">
               Sign in to start attempting quizzes
             </p>
@@ -138,7 +149,9 @@ export const Login = () => {
             <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-4">
               {/* Email */}
               <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">Email Address</label>
+                <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  Email Address
+                </label>
                 <div className="relative">
                   <Mail className="absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 text-slate-400" />
                   <input
@@ -155,10 +168,9 @@ export const Login = () => {
               {/* Password */}
               <div className="flex flex-col gap-1">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">Password</label>
-                  <Link to="/forgot-password" className="text-xs font-semibold text-indigo-600 hover:text-indigo-700">
-                    Forgot Password?
-                  </Link>
+                  <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Password
+                  </label>
                 </div>
                 <div className="relative">
                   <Lock className="absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 text-slate-400" />
@@ -170,6 +182,14 @@ export const Login = () => {
                     className="w-full rounded-lg border border-slate-200 py-3 pl-10 pr-4 text-slate-900 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
                     required
                   />
+                </div>
+                <div className="mt-2 flex items-end justify-end">
+                  <Link
+                    to="/forgot-password"
+                    className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
+                  >
+                    Forgot Password?
+                  </Link>
                 </div>
               </div>
 
@@ -189,13 +209,15 @@ export const Login = () => {
 
             <div className="mt-6 text-center text-sm text-slate-500">
               Don't have an account?{" "}
-              <Link to="/register" className="font-semibold text-indigo-600 hover:text-indigo-700">
+              <Link
+                to="/register"
+                className="font-semibold text-indigo-600 hover:text-indigo-700"
+              >
                 Sign Up
               </Link>
             </div>
           </div>
         )}
-
       </div>
     </div>
   );

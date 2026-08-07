@@ -12,7 +12,9 @@ import {
   Code2, 
   CheckCircle2, 
   XCircle, 
-  Check 
+  Check,
+  ShieldAlert,
+  ShieldCheck
 } from "lucide-react";
 
 export const QuizSession = () => {
@@ -39,9 +41,29 @@ export const QuizSession = () => {
   const [showConsole, setShowConsole] = useState(false);
   const [consoleTab, setConsoleTab] = useState(0);
 
-  const timerRef = useRef(null);
+  // Proctoring state
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [proctorWarning, setProctorWarning] = useState(null); // "fullscreen" or "tab"
+  const [warningTimeLeft, setWarningTimeLeft] = useState(10);
 
-  // Restore state from session storage on reload
+  const timerRef = useRef(null);
+  const warningTimerRef = useRef(null);
+
+  // Helper to trigger browser Fullscreen
+  const enterFullscreen = () => {
+    const docEl = document.documentElement;
+    if (docEl.requestFullscreen) {
+      docEl.requestFullscreen();
+    } else if (docEl.mozRequestFullScreen) {
+      docEl.mozRequestFullScreen();
+    } else if (docEl.webkitRequestFullscreen) {
+      docEl.webkitRequestFullscreen();
+    } else if (docEl.msRequestFullscreen) {
+      docEl.msRequestFullscreen();
+    }
+  };
+
+  // 1. Restore state from session storage on reload
   useEffect(() => {
     let activeSession = location.state;
 
@@ -95,6 +117,99 @@ export const QuizSession = () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [quizId]);
+
+  // 2. Proctoring listeners (Fullscreen, Tab/Window switches, context blocks)
+  useEffect(() => {
+    // Initial check
+    setIsFullscreen(!!document.fullscreenElement);
+
+    const handleFullscreenChange = () => {
+      const isFull = !!document.fullscreenElement;
+      setIsFullscreen(isFull);
+      if (!isFull) {
+        setProctorWarning("fullscreen");
+      } else {
+        if (!document.hidden) {
+          setProctorWarning(null);
+        }
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        setProctorWarning("tab");
+      }
+    };
+
+    const handleWindowBlur = () => {
+      setProctorWarning("tab");
+    };
+
+    const handleWindowFocus = () => {
+      if (document.fullscreenElement && !document.hidden) {
+        setProctorWarning(null);
+      }
+    };
+
+    // Keyboard copy/inspections block
+    const handleKeyDown = (e) => {
+      const isCtrl = e.ctrlKey || e.metaKey;
+      if (
+        (isCtrl && ["c", "v", "x", "u", "s"].includes(e.key.toLowerCase())) ||
+        (isCtrl && e.shiftKey && e.key.toLowerCase() === "i") ||
+        e.key === "F12"
+      ) {
+        e.preventDefault();
+        alert("Proctoring Guard: Copying, pasting, view-source, and element inspects are strictly disabled during this quiz.");
+      }
+    };
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("blur", handleWindowBlur);
+    window.addEventListener("focus", handleWindowFocus);
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("blur", handleWindowBlur);
+      window.removeEventListener("focus", handleWindowFocus);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
+
+  // 3. Proctoring violation 10s countdown timer
+  useEffect(() => {
+    if (proctorWarning) {
+      setWarningTimeLeft(10);
+      
+      warningTimerRef.current = setInterval(() => {
+        setWarningTimeLeft((prev) => {
+          if (prev <= 1) {
+            clearInterval(warningTimerRef.current);
+            // Exceeded 10s warning - auto-submit and terminate
+            if (session) {
+              handleAutoSubmit(session.attemptId);
+            }
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } else {
+      if (warningTimerRef.current) {
+        clearInterval(warningTimerRef.current);
+      }
+      setWarningTimeLeft(10);
+    }
+
+    return () => {
+      if (warningTimerRef.current) {
+        clearInterval(warningTimerRef.current);
+      }
+    };
+  }, [proctorWarning, session]);
 
   const handleOptionSelect = (questionId, optionId) => {
     const updated = {
@@ -185,6 +300,11 @@ export const QuizSession = () => {
     const formattedAnswers = buildSubmissionPayload();
 
     try {
+      // Exit fullscreen if still active
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
+
       const res = await api.post(`/quizzes/${quizId}/submit`, {
         attemptId: attemptId || session.attemptId,
         answers: formattedAnswers,
@@ -210,6 +330,11 @@ export const QuizSession = () => {
     const formattedAnswers = buildSubmissionPayload();
 
     try {
+      // Exit fullscreen if still active
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
+
       const res = await api.post(`/quizzes/${quizId}/submit`, {
         attemptId: session.attemptId,
         answers: formattedAnswers,
@@ -248,7 +373,15 @@ export const QuizSession = () => {
   const monacoLanguage = activeLanguage === "cpp" ? "cpp" : activeLanguage === "js" ? "javascript" : activeLanguage;
 
   return (
-    <div className="mx-auto max-w-6xl py-2 flex flex-col gap-4">
+    <div 
+      className="mx-auto max-w-6xl py-2 flex flex-col gap-4 select-none"
+      onContextMenu={(e) => e.preventDefault()}
+      onCopy={(e) => e.preventDefault()}
+      onCut={(e) => e.preventDefault()}
+      onPaste={(e) => e.preventDefault()}
+      onDragStart={(e) => e.preventDefault()}
+      onDrop={(e) => e.preventDefault()}
+    >
       
       {/* Top Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 pb-3">
@@ -329,6 +462,8 @@ export const QuizSession = () => {
                         fontSize: 13,
                         automaticLayout: true,
                         scrollbar: { vertical: "visible", horizontal: "visible" },
+                        contextmenu: false,
+                        copyWithSyntaxHighlighting: false,
                       }}
                     />
                   </div>
@@ -594,6 +729,85 @@ export const QuizSession = () => {
                 )}
               </button>
             </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* Proctoring Start Modal */}
+      {!isFullscreen && !proctorWarning && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950 p-4">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-800 bg-slate-900 p-8 shadow-2xl flex flex-col gap-6 text-center text-white">
+            
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-indigo-950 text-indigo-400 border border-indigo-800 animate-pulse">
+              <ShieldCheck className="h-8 w-8" />
+            </div>
+
+            <div>
+              <h3 className="text-2xl font-extrabold font-display">Assessment Proctoring Guard</h3>
+              <p className="mt-3 text-sm text-slate-450 leading-relaxed">
+                This test is strictly monitored to ensure fairness. You must run this quiz in <strong>Fullscreen mode</strong>. 
+                Switching tabs, minimizing the browser, or exiting fullscreen mode will initiate an automatic test cancellation.
+              </p>
+              <div className="mt-4 rounded-xl bg-indigo-950/40 p-4 border border-indigo-900/50 text-xs text-indigo-350 text-left flex flex-col gap-2">
+                <span className="flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-indigo-400"></span>
+                  <span>Clipboard operations (copy/cut/paste) are disabled.</span>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-indigo-400"></span>
+                  <span>Shortcuts like inspect element (F12) are blocked.</span>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-indigo-400"></span>
+                  <span>You have 10 seconds to recover if you exit fullscreen.</span>
+                </span>
+              </div>
+            </div>
+
+            <button
+              onClick={enterFullscreen}
+              className="w-full rounded-xl bg-indigo-600 py-3.5 text-sm font-semibold text-white hover:bg-indigo-500 active:scale-95 transition-all shadow-lg shadow-indigo-600/30"
+            >
+              Start Assessment in Fullscreen
+            </button>
+
+          </div>
+        </div>
+      )}
+
+      {/* Proctoring Violation Warning Modal */}
+      {proctorWarning && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-red-950/80 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-red-800 bg-red-950 p-6 shadow-2xl flex flex-col gap-5 text-center text-white border-t-4 border-t-red-500">
+            
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-red-900/50 text-red-400 border border-red-750 animate-bounce">
+              <ShieldAlert className="h-7 w-7" />
+            </div>
+
+            <div>
+              <h3 className="text-xl font-bold font-display text-red-200">Proctoring Violation Detected!</h3>
+              <p className="mt-2 text-sm text-red-300">
+                {proctorWarning === "fullscreen" 
+                  ? "You have exited Fullscreen mode!" 
+                  : "You have switched browser tabs or windows!"}
+              </p>
+              <p className="mt-1.5 text-xs text-red-400">
+                Please return to Fullscreen mode immediately. If you do not return within the countdown, your test will be auto-submitted and graded as-is.
+              </p>
+            </div>
+
+            <div className="bg-red-900/30 py-3 rounded-xl border border-red-800/40">
+              <span className="text-3xl font-extrabold font-mono text-red-400">{warningTimeLeft}s</span>
+              <span className="block text-[10px] text-red-300 uppercase tracking-wider mt-1">Remaining to Return</span>
+            </div>
+
+            <button
+              onClick={enterFullscreen}
+              className="w-full rounded-xl bg-red-600 py-3 text-sm font-bold text-white hover:bg-red-500 active:scale-95 transition-all"
+            >
+              Return to Fullscreen
+            </button>
 
           </div>
         </div>
