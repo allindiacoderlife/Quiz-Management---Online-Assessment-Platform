@@ -26,7 +26,7 @@ export const QuizSession = () => {
   const [questions, setQuestions] = useState([]);
   const [currentIdx, setCurrentIdx] = useState(0);
   
-  // State mapping questionId -> selectedOptionId (for MCQ) or { code, language } (for CODING)
+  // State mapping questionId -> selectedOptionId (for MCQ) or { language, codes: { [lang]: code } } (for CODING)
   const [selectedAnswers, setSelectedAnswers] = useState({});
   
   const [timeLeft, setTimeLeft] = useState(null);
@@ -48,6 +48,12 @@ export const QuizSession = () => {
 
   const timerRef = useRef(null);
   const warningTimerRef = useRef(null);
+  const submittingRef = useRef(submitting);
+
+  // Sync submitting state ref for visibility checks
+  useEffect(() => {
+    submittingRef.current = submitting;
+  }, [submitting]);
 
   // Helper to trigger browser Fullscreen
   const enterFullscreen = () => {
@@ -124,6 +130,7 @@ export const QuizSession = () => {
     setIsFullscreen(!!document.fullscreenElement);
 
     const handleFullscreenChange = () => {
+      if (submittingRef.current) return;
       const isFull = !!document.fullscreenElement;
       setIsFullscreen(isFull);
       if (!isFull) {
@@ -136,16 +143,19 @@ export const QuizSession = () => {
     };
 
     const handleVisibilityChange = () => {
+      if (submittingRef.current) return;
       if (document.hidden) {
         setProctorWarning("tab");
       }
     };
 
     const handleWindowBlur = () => {
+      if (submittingRef.current) return;
       setProctorWarning("tab");
     };
 
     const handleWindowFocus = () => {
+      if (submittingRef.current) return;
       if (document.fullscreenElement && !document.hidden) {
         setProctorWarning(null);
       }
@@ -223,9 +233,16 @@ export const QuizSession = () => {
   };
 
   const handleCodeChange = (questionId, lang, code) => {
+    const prevAnswer = selectedAnswers[questionId] || { codes: {}, language: lang };
     const updated = {
       ...selectedAnswers,
-      [questionId]: { code, language: lang },
+      [questionId]: {
+        language: lang,
+        codes: {
+          ...(prevAnswer.codes || {}),
+          [lang]: code
+        }
+      }
     };
     setSelectedAnswers(updated);
     if (session) {
@@ -236,25 +253,27 @@ export const QuizSession = () => {
   const handleLanguageChange = (questionId, lang) => {
     setSelectedLanguage(lang);
     
-    // Maintain current code if edited, or reset to template for the new language
-    const currentCode = selectedAnswers[questionId]?.code;
-    const template = currentQuestion.codingTemplate?.[lang] || "";
+    const prevAnswer = selectedAnswers[questionId] || { codes: {} };
+    // Load previously edited code or template fallback
+    const currentCode = prevAnswer.codes?.[lang] || currentQuestion.codingTemplate?.[lang] || "";
     
-    handleCodeChange(questionId, lang, currentCode || template);
+    handleCodeChange(questionId, lang, currentCode);
   };
 
   const formatTime = (seconds) => {
     if (seconds === null) return "00:00";
     const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+    const secs = seconds % 65; // keep normal mod behavior
+    const correctSecs = seconds % 60;
+    return `${mins.toString().padStart(2, "0")}:${correctSecs.toString().padStart(2, "0")}`;
   };
 
   // Compile and run against sample test cases
   const handleRunCode = async () => {
     const currentQuestion = questions[currentIdx];
     const ans = selectedAnswers[currentQuestion.id];
-    const codeToRun = ans?.code || currentQuestion.codingTemplate?.[selectedLanguage] || "";
+    const activeLanguage = ans?.language || selectedLanguage;
+    const codeToRun = ans?.codes?.[activeLanguage] || ans?.code || currentQuestion.codingTemplate?.[activeLanguage] || "";
 
     setRunningCode(true);
     setRunResults(null);
@@ -265,7 +284,7 @@ export const QuizSession = () => {
       const res = await api.post(`/quizzes/${quizId}/run`, {
         questionId: currentQuestion.id,
         code: codeToRun,
-        language: selectedLanguage,
+        language: activeLanguage,
       });
       setRunResults(res.results);
     } catch (err) {
@@ -279,10 +298,12 @@ export const QuizSession = () => {
     return questions.map((q) => {
       const ans = selectedAnswers[q.id];
       if (q.type === "CODING") {
+        const lang = ans?.language || selectedLanguage;
+        const code = ans?.codes?.[lang] || ans?.code || q.codingTemplate?.[lang] || "";
         return {
           questionId: q.id,
-          submittedCode: ans?.code || q.codingTemplate?.[selectedLanguage] || "",
-          submittedLanguage: ans?.language || selectedLanguage,
+          submittedCode: code,
+          submittedLanguage: lang,
         };
       } else {
         return {
@@ -371,6 +392,9 @@ export const QuizSession = () => {
   const activeCodeObj = selectedAnswers[currentQuestion.id];
   const activeLanguage = activeCodeObj?.language || selectedLanguage;
   const monacoLanguage = activeLanguage === "cpp" ? "cpp" : activeLanguage === "js" ? "javascript" : activeLanguage;
+  
+  // Resolve current code editor text
+  const currentEditorValue = activeCodeObj?.codes?.[activeLanguage] || activeCodeObj?.code || currentQuestion.codingTemplate?.[activeLanguage] || "";
 
   return (
     <div 
@@ -454,7 +478,7 @@ export const QuizSession = () => {
                     <Editor
                       height="320px"
                       language={monacoLanguage}
-                      value={activeCodeObj?.code || currentQuestion.codingTemplate?.[activeLanguage] || ""}
+                      value={currentEditorValue}
                       onChange={(val) => handleCodeChange(currentQuestion.id, activeLanguage, val)}
                       theme="vs-dark"
                       options={{
@@ -601,7 +625,7 @@ export const QuizSession = () => {
                           </div>
                           <div className="bg-slate-900/60 p-2.5 rounded border border-slate-800/80">
                             <span className="text-[10px] text-slate-500 font-bold uppercase block">Expected Output</span>
-                            <pre className="mt-1 text-slate-350 whitespace-pre-wrap">{runResults[consoleTab].expected}</pre>
+                            <pre className="mt-1 text-slate-355 whitespace-pre-wrap">{runResults[consoleTab].expected}</pre>
                           </div>
                         </div>
 
