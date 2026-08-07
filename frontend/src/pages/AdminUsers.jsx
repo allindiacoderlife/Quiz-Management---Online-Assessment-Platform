@@ -303,7 +303,7 @@ export const AdminUsers = () => {
                       This student has not made any quiz attempts.
                     </div>
                   ) : (
-                    <div className="overflow-x-auto max-h-[300px]">
+                    <div className="overflow-x-auto max-h-75">
                       <table className="w-full text-left text-sm border-collapse">
                         <thead>
                           <tr className="bg-slate-50 text-xs font-bold uppercase text-slate-500 border-b border-slate-200">
