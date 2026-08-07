@@ -346,8 +346,14 @@ export const getAttempts = asyncHandler(async (req, res) => {
 export const getAttemptById = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const userId = req.user.id;
+  const userRole = req.user.role;
 
-  // 1. Fetch attempt and verify ownership
+  // 1. Fetch attempt and verify ownership (unless user is ADMIN)
+  let conditions = eq(attempts.id, id);
+  if (userRole !== "ADMIN") {
+    conditions = and(conditions, eq(attempts.userId, userId));
+  }
+
   const [attempt] = await db
     .select({
       id: attempts.id,
@@ -369,7 +375,7 @@ export const getAttemptById = asyncHandler(async (req, res) => {
     .from(attempts)
     .innerJoin(quizzes, eq(attempts.quizId, quizzes.id))
     .leftJoin(categories, eq(quizzes.categoryId, categories.id))
-    .where(and(eq(attempts.id, id), eq(attempts.userId, userId)));
+    .where(conditions);
 
   if (!attempt) {
     throw new ApiError(404, "Quiz attempt not found or unauthorized");
