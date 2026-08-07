@@ -1,7 +1,14 @@
 import axios from "axios";
+const API_BASE_URL =
+  import.meta.env.VITE_API_URL ||
+  (typeof window !== "undefined" &&
+  (window.location.hostname === "localhost" ||
+    window.location.hostname === "127.0.0.1")
+    ? "http://localhost:8000/api"
+    : "/api");
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://localhost:8000/api",
+  baseURL: API_BASE_URL,
   headers: {
     "Content-Type": "application/json",
   },
@@ -15,13 +22,14 @@ api.interceptors.request.use(
     }
     return config;
   },
-  (error) => Promise.reject(error)
+  (error) => Promise.reject(error),
 );
 
 api.interceptors.response.use(
   (response) => response.data,
   (error) => {
-    const message = error.response?.data?.message || "An unexpected error occurred";
+    const message =
+      error.response?.data?.message || "An unexpected error occurred";
     const details = error.response?.data?.details || null;
     const status = error.response?.status;
 
@@ -29,7 +37,12 @@ api.interceptors.response.use(
       localStorage.removeItem("quiz_token");
       // Redirect if session expired and user is not on an auth screen
       const path = window.location.pathname;
-      if (path !== "/login" && path !== "/register" && path !== "/forgot-password" && path !== "/reset-password") {
+      if (
+        path !== "/login" &&
+        path !== "/register" &&
+        path !== "/forgot-password" &&
+        path !== "/reset-password"
+      ) {
         window.location.href = "/login";
       }
     }
@@ -40,7 +53,7 @@ api.interceptors.response.use(
       status,
       originalError: error,
     });
-  }
+  },
 );
 
 export default api;
