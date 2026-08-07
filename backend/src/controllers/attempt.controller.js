@@ -1,5 +1,13 @@
 import { db } from "../lib/db.js";
-import { attempts, quizzes, questions, options, answers, categories, testCases } from "../db/schema.js";
+import {
+  attempts,
+  quizzes,
+  questions,
+  options,
+  answers,
+  categories,
+  testCases,
+} from "../db/schema.js";
 import { eq, and, sql, inArray } from "drizzle-orm";
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
@@ -10,10 +18,7 @@ export const startAttempt = asyncHandler(async (req, res) => {
   const userId = req.user.id;
 
   // 1. Verify quiz exists and is PUBLISHED
-  const [quiz] = await db
-    .select()
-    .from(quizzes)
-    .where(eq(quizzes.id, quizId));
+  const [quiz] = await db.select().from(quizzes).where(eq(quizzes.id, quizId));
 
   if (!quiz) {
     throw new ApiError(404, "Quiz not found");
@@ -32,7 +37,7 @@ export const startAttempt = asyncHandler(async (req, res) => {
   if (attemptsCount && attemptsCount.count >= quiz.maxAttempts) {
     throw new ApiError(
       400,
-      `You have reached the maximum allowed attempts (${quiz.maxAttempts}) for this quiz.`
+      `You have reached the maximum allowed attempts (${quiz.maxAttempts}) for this quiz.`,
     );
   }
 
@@ -81,7 +86,8 @@ export const startAttempt = asyncHandler(async (req, res) => {
     difficulty: q.difficulty,
     type: q.type,
     codingTemplate: q.codingTemplate ? JSON.parse(q.codingTemplate) : null,
-    options: q.type === "MCQ" ? optsList.filter((o) => o.questionId === q.id) : [],
+    options:
+      q.type === "MCQ" ? optsList.filter((o) => o.questionId === q.id) : [],
   }));
 
   res.status(201).json({
@@ -117,8 +123,8 @@ export const submitAttempt = asyncHandler(async (req, res) => {
       and(
         eq(attempts.id, attemptId),
         eq(attempts.userId, userId),
-        eq(attempts.status, "IN_PROGRESS")
-      )
+        eq(attempts.status, "IN_PROGRESS"),
+      ),
     );
 
   if (!attempt) {
@@ -126,10 +132,7 @@ export const submitAttempt = asyncHandler(async (req, res) => {
   }
 
   // 2. Fetch quiz details
-  const [quiz] = await db
-    .select()
-    .from(quizzes)
-    .where(eq(quizzes.id, quizId));
+  const [quiz] = await db.select().from(quizzes).where(eq(quizzes.id, quizId));
 
   if (!quiz) {
     throw new ApiError(404, "Quiz associated with attempt not found");
@@ -204,7 +207,9 @@ export const submitAttempt = asyncHandler(async (req, res) => {
           const runPromises = qTestCases.map(async (tc) => {
             try {
               const runRes = await executeCode(language, code, tc.input);
-              const passed = !runRes.error && runRes.output.trim() === tc.expectedOutput.trim();
+              const passed =
+                !runRes.error &&
+                runRes.output.trim() === tc.expectedOutput.trim();
               return passed;
             } catch (err) {
               return false;
@@ -277,35 +282,36 @@ export const submitAttempt = asyncHandler(async (req, res) => {
     }
   }
 
-  const percentage = totalMarks > 0 ? ((obtainedMarks / totalMarks) * 100).toFixed(2) : "0.00";
-  const status = parseFloat(percentage) >= quiz.passingScore ? "PASSED" : "FAILED";
-  const timeTaken = Math.round((new Date() - new Date(attempt.startedAt)) / 1000); // in seconds
+  const percentage =
+    totalMarks > 0 ? ((obtainedMarks / totalMarks) * 100).toFixed(2) : "0.00";
+  const status =
+    parseFloat(percentage) >= quiz.passingScore ? "PASSED" : "FAILED";
+  const timeTaken = Math.round(
+    (new Date() - new Date(attempt.startedAt)) / 1000,
+  ); // in seconds
 
-  // 5. Save all records inside a transaction
-  const result = await db.transaction(async (tx) => {
-    // Save answers
-    if (answersToInsert.length > 0) {
-      await tx.insert(answers).values(answersToInsert);
-    }
+  // 5. Save all records (No transactions over neon-http driver)
+  if (answersToInsert.length > 0) {
+    await db.insert(answers).values(answersToInsert);
+  }
 
-    // Update attempt record
-    const [updatedAttempt] = await tx
-      .update(attempts)
-      .set({
-        score: obtainedMarks,
-        percentage,
-        correctAnswers,
-        incorrectAnswers,
-        unanswered,
-        timeTaken,
-        status,
-        completedAt: new Date(),
-      })
-      .where(eq(attempts.id, attemptId))
-      .returning();
+  // Update attempt record
+  const [updatedAttempt] = await db
+    .update(attempts)
+    .set({
+      score: obtainedMarks,
+      percentage,
+      correctAnswers,
+      incorrectAnswers,
+      unanswered,
+      timeTaken,
+      status,
+      completedAt: new Date(),
+    })
+    .where(eq(attempts.id, attemptId))
+    .returning();
 
-    return updatedAttempt;
-  });
+  const result = updatedAttempt;
 
   res.status(200).json({
     success: true,
@@ -393,9 +399,10 @@ export const getAttemptById = asyncHandler(async (req, res) => {
 
   // 4. Map questions with options and highlight user selections
   const questionsReview = dbQuestions.map((q) => {
-    const questionOptions = q.type === "MCQ" ? dbOptions.filter((o) => o.questionId === q.id) : [];
+    const questionOptions =
+      q.type === "MCQ" ? dbOptions.filter((o) => o.questionId === q.id) : [];
     const userAnswer = userAnswers.find((a) => a.questionId === q.id);
-    
+
     return {
       id: q.id,
       questionText: q.questionText,
@@ -427,7 +434,10 @@ export const runCodeAgainstSamples = asyncHandler(async (req, res) => {
   const { questionId, code, language } = req.body;
 
   if (!questionId || !code || !language) {
-    throw new ApiError(400, "Question ID, code, and language parameters are required");
+    throw new ApiError(
+      400,
+      "Question ID, code, and language parameters are required",
+    );
   }
 
   // 1. Verify question exists and is CODING type
@@ -448,7 +458,9 @@ export const runCodeAgainstSamples = asyncHandler(async (req, res) => {
   const sampleTestCases = await db
     .select()
     .from(testCases)
-    .where(and(eq(testCases.questionId, questionId), eq(testCases.isSample, true)));
+    .where(
+      and(eq(testCases.questionId, questionId), eq(testCases.isSample, true)),
+    );
 
   if (sampleTestCases.length === 0) {
     return res.status(200).json({
@@ -461,7 +473,8 @@ export const runCodeAgainstSamples = asyncHandler(async (req, res) => {
   // 3. Execute code in parallel against sample test cases
   const executionPromises = sampleTestCases.map(async (tc) => {
     const execRes = await executeCode(language, code, tc.input);
-    const passed = !execRes.error && execRes.output.trim() === tc.expectedOutput.trim();
+    const passed =
+      !execRes.error && execRes.output.trim() === tc.expectedOutput.trim();
 
     return {
       input: tc.input,

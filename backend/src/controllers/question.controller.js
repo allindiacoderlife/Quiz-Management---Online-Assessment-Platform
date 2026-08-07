@@ -82,55 +82,53 @@ export const createQuestion = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Quiz not found");
   }
 
-  const result = await db.transaction(async (tx) => {
-    const [newQuestion] = await tx
-      .insert(questions)
-      .values({
-        quizId,
-        questionText,
-        marks,
-        explanation,
-        difficulty,
-        type,
-        codingTemplate: codingTemplate ? JSON.stringify(codingTemplate) : null,
-      })
+  const [newQuestion] = await db
+    .insert(questions)
+    .values({
+      quizId,
+      questionText,
+      marks,
+      explanation,
+      difficulty,
+      type,
+      codingTemplate: codingTemplate ? JSON.stringify(codingTemplate) : null,
+    })
+    .returning();
+
+  let newOptions = [];
+  let newTestCases = [];
+
+  if (type === "CODING") {
+    const formattedTestCases = testCasesList.map((tc) => ({
+      questionId: newQuestion.id,
+      input: tc.input || "",
+      expectedOutput: tc.expectedOutput || "",
+      isSample: !!tc.isSample,
+    }));
+
+    newTestCases = await db
+      .insert(testCases)
+      .values(formattedTestCases)
       .returning();
+  } else {
+    const formattedOptions = optionsList.map((o) => ({
+      questionId: newQuestion.id,
+      optionText: o.optionText,
+      isCorrect: !!o.isCorrect,
+    }));
 
-    let newOptions = [];
-    let newTestCases = [];
+    newOptions = await db
+      .insert(options)
+      .values(formattedOptions)
+      .returning();
+  }
 
-    if (type === "CODING") {
-      const formattedTestCases = testCasesList.map((tc) => ({
-        questionId: newQuestion.id,
-        input: tc.input || "",
-        expectedOutput: tc.expectedOutput || "",
-        isSample: !!tc.isSample,
-      }));
-
-      newTestCases = await tx
-        .insert(testCases)
-        .values(formattedTestCases)
-        .returning();
-    } else {
-      const formattedOptions = optionsList.map((o) => ({
-        questionId: newQuestion.id,
-        optionText: o.optionText,
-        isCorrect: !!o.isCorrect,
-      }));
-
-      newOptions = await tx
-        .insert(options)
-        .values(formattedOptions)
-        .returning();
-    }
-
-    return {
-      ...newQuestion,
-      codingTemplate: newQuestion.codingTemplate ? JSON.parse(newQuestion.codingTemplate) : null,
-      options: newOptions,
-      testCases: newTestCases,
-    };
-  });
+  const result = {
+    ...newQuestion,
+    codingTemplate: newQuestion.codingTemplate ? JSON.parse(newQuestion.codingTemplate) : null,
+    options: newOptions,
+    testCases: newTestCases,
+  };
 
   res.status(201).json({
     success: true,
@@ -179,79 +177,77 @@ export const updateQuestion = asyncHandler(async (req, res) => {
     }
   }
 
-  const result = await db.transaction(async (tx) => {
-    const [updatedQuestion] = await tx
-      .update(questions)
-      .set({
-        ...(questionText && { questionText }),
-        ...(marks !== undefined && { marks }),
-        ...(explanation !== undefined && { explanation }),
-        ...(difficulty && { difficulty }),
-        ...(type && { type }),
-        codingTemplate: codingTemplate ? JSON.stringify(codingTemplate) : (type === "MCQ" ? null : undefined),
-      })
-      .where(eq(questions.id, id))
-      .returning();
+  const [updatedQuestion] = await db
+    .update(questions)
+    .set({
+      ...(questionText && { questionText }),
+      ...(marks !== undefined && { marks }),
+      ...(explanation !== undefined && { explanation }),
+      ...(difficulty && { difficulty }),
+      ...(type && { type }),
+      codingTemplate: codingTemplate ? JSON.stringify(codingTemplate) : (type === "MCQ" ? null : undefined),
+    })
+    .where(eq(questions.id, id))
+    .returning();
 
-    let updatedOptions = [];
-    let updatedTestCases = [];
+  let updatedOptions = [];
+  let updatedTestCases = [];
 
-    if (qType === "CODING") {
-      // Clear options and write test cases
-      await tx.delete(options).where(eq(options.questionId, id));
-      
-      if (testCasesList) {
-        await tx.delete(testCases).where(eq(testCases.questionId, id));
+  if (qType === "CODING") {
+    // Clear options and write test cases
+    await db.delete(options).where(eq(options.questionId, id));
+    
+    if (testCasesList) {
+      await db.delete(testCases).where(eq(testCases.questionId, id));
 
-        const formattedTestCases = testCasesList.map((tc) => ({
-          questionId: id,
-          input: tc.input || "",
-          expectedOutput: tc.expectedOutput || "",
-          isSample: !!tc.isSample,
-        }));
+      const formattedTestCases = testCasesList.map((tc) => ({
+        questionId: id,
+        input: tc.input || "",
+        expectedOutput: tc.expectedOutput || "",
+        isSample: !!tc.isSample,
+      }));
 
-        updatedTestCases = await tx
-          .insert(testCases)
-          .values(formattedTestCases)
-          .returning();
-      } else {
-        updatedTestCases = await tx
-          .select()
-          .from(testCases)
-          .where(eq(testCases.questionId, id));
-      }
+      updatedTestCases = await db
+        .insert(testCases)
+        .values(formattedTestCases)
+        .returning();
     } else {
-      // Clear test cases and write options
-      await tx.delete(testCases).where(eq(testCases.questionId, id));
-
-      if (optionsList) {
-        await tx.delete(options).where(eq(options.questionId, id));
-
-        const formattedOptions = optionsList.map((o) => ({
-          questionId: id,
-          optionText: o.optionText,
-          isCorrect: !!o.isCorrect,
-        }));
-
-        updatedOptions = await tx
-          .insert(options)
-          .values(formattedOptions)
-          .returning();
-      } else {
-        updatedOptions = await tx
-          .select()
-          .from(options)
-          .where(eq(options.questionId, id));
-      }
+      updatedTestCases = await db
+        .select()
+        .from(testCases)
+        .where(eq(testCases.questionId, id));
     }
+  } else {
+    // Clear test cases and write options
+    await db.delete(testCases).where(eq(testCases.questionId, id));
 
-    return {
-      ...updatedQuestion,
-      codingTemplate: updatedQuestion.codingTemplate ? JSON.parse(updatedQuestion.codingTemplate) : null,
-      options: updatedOptions,
-      testCases: updatedTestCases,
-    };
-  });
+    if (optionsList) {
+      await db.delete(options).where(eq(options.questionId, id));
+
+      const formattedOptions = optionsList.map((o) => ({
+        questionId: id,
+        optionText: o.optionText,
+        isCorrect: !!o.isCorrect,
+      }));
+
+      updatedOptions = await db
+        .insert(options)
+        .values(formattedOptions)
+        .returning();
+    } else {
+      updatedOptions = await db
+        .select()
+        .from(options)
+        .where(eq(options.questionId, id));
+    }
+  }
+
+  const result = {
+    ...updatedQuestion,
+    codingTemplate: updatedQuestion.codingTemplate ? JSON.parse(updatedQuestion.codingTemplate) : null,
+    options: updatedOptions,
+    testCases: updatedTestCases,
+  };
 
   res.status(200).json({
     success: true,
