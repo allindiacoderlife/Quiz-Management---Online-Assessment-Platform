@@ -1,216 +1,81 @@
-import { spawn } from "child_process";
-import fs from "fs";
-import path from "path";
-import crypto from "crypto";
-import { fileURLToPath } from "url";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const TEMP_DIR = path.join(__dirname, "../temp_exec");
-
-// Ensure temp execution directory exists
-if (!fs.existsSync(TEMP_DIR)) {
-  fs.mkdirSync(TEMP_DIR, { recursive: true });
-}
-
 /**
- * Execute code inside a secure local subprocess
+ * Execute code inside a secure sandbox using public Judge0 Community Edition API
  * @param {string} language - python, javascript, java, c, cpp
  * @param {string} code - source code string
  * @param {string} input - input passed to standard input (stdin)
- * @param {number} timeoutMs - execution time limit in milliseconds
  * @returns {Promise<{ output: string, error: string, timeout: boolean }>}
  */
-export const executeCode = (language, code, input = "", timeoutMs = 4000) => {
-  return new Promise((resolve) => {
-    const runId = crypto.randomUUID();
-    const subDir = path.join(TEMP_DIR, runId);
-    fs.mkdirSync(subDir, { recursive: true });
+export const executeCode = async (language, code, input = "") => {
+  const langLower = language.toLowerCase();
+  let languageId = 71; // Default to Python (3.8.1)
 
-    let sourceFilePath = "";
-    let compileCmd = "";
-    let compileArgs = [];
-    let runCmd = "";
-    let runArgs = [];
+  switch (langLower) {
+    case "python":
+    case "python3":
+    case "py":
+      languageId = 71;
+      break;
+    case "javascript":
+    case "js":
+    case "node":
+      languageId = 93; // Node.js 18.15.0
+      break;
+    case "cpp":
+    case "c++":
+      languageId = 54; // C++ (GCC 9.2.0)
+      break;
+    case "c":
+      languageId = 50; // C (GCC 9.2.0)
+      break;
+    case "java":
+      languageId = 62; // Java (OpenJDK 13.0.1)
+      break;
+  }
 
-    const langLower = language.toLowerCase();
-
-    // Setup compile/run params based on language type
-    switch (langLower) {
-      case "python":
-      case "python3":
-        sourceFilePath = path.join(subDir, "solution.py");
-        runCmd = process.platform === "win32" ? "python" : "python3";
-        runArgs = [sourceFilePath];
-        break;
-
-      case "javascript":
-      case "js":
-        sourceFilePath = path.join(subDir, "solution.js");
-        runCmd = "node";
-        runArgs = [sourceFilePath];
-        break;
-
-      case "cpp":
-      case "c++":
-        sourceFilePath = path.join(subDir, "solution.cpp");
-        const exePathCpp = path.join(subDir, process.platform === "win32" ? "solution.exe" : "solution.out");
-        compileCmd = "g++";
-        compileArgs = [sourceFilePath, "-o", exePathCpp];
-        runCmd = exePathCpp;
-        runArgs = [];
-        break;
-
-      case "c":
-        sourceFilePath = path.join(subDir, "solution.c");
-        const exePathC = path.join(subDir, process.platform === "win32" ? "solution.exe" : "solution.out");
-        compileCmd = "gcc";
-        compileArgs = [sourceFilePath, "-o", exePathC];
-        runCmd = exePathC;
-        runArgs = [];
-        break;
-
-      case "java":
-        // Java requires file name to match the public class (typically Main)
-        sourceFilePath = path.join(subDir, "Main.java");
-        compileCmd = "javac";
-        compileArgs = [sourceFilePath];
-        runCmd = "java";
-        runArgs = ["-cp", subDir, "Main"];
-        break;
-
-      default:
-        resolve({
-          output: "",
-          error: `Unsupported language: ${language}`,
-          timeout: false,
-        });
-        cleanUpDir(subDir);
-        return;
-    }
-
-    try {
-      // Write source code file
-      fs.writeFileSync(sourceFilePath, code);
-    } catch (writeErr) {
-      resolve({
-        output: "",
-        error: `System write error: ${writeErr.message}`,
-        timeout: false,
-      });
-      cleanUpDir(subDir);
-      return;
-    }
-
-    // Helper: Execute the run command
-    const startRunning = () => {
-      let stdoutData = "";
-      let stderrData = "";
-      let isTimedOut = false;
-
-      const child = spawn(runCmd, runArgs, { cwd: subDir });
-
-      // Handle standard input (stdin)
-      if (input) {
-        child.stdin.write(input);
-        child.stdin.end();
-      } else {
-        child.stdin.end();
-      }
-
-      // Handle standard output (stdout)
-      child.stdout.on("data", (data) => {
-        stdoutData += data.toString();
-      });
-
-      // Handle standard error (stderr)
-      child.stderr.on("data", (data) => {
-        stderrData += data.toString();
-      });
-
-      // Set timeout threshold
-      const timeout = setTimeout(() => {
-        isTimedOut = true;
-        child.kill("SIGKILL");
-      }, timeoutMs);
-
-      child.on("close", (code) => {
-        clearTimeout(timeout);
-        cleanUpDir(subDir);
-
-        if (isTimedOut) {
-          resolve({
-            output: "",
-            error: "Time Limit Exceeded (TLE)",
-            timeout: true,
-          });
-        } else {
-          resolve({
-            output: stdoutData,
-            error: stderrData || (code !== 0 ? `Execution failed with exit code ${code}` : ""),
-            timeout: false,
-          });
-        }
-      });
-
-      child.on("error", (err) => {
-        clearTimeout(timeout);
-        cleanUpDir(subDir);
-        resolve({
-          output: "",
-          error: `Execution command error: ${err.message}. Make sure the interpreter/runtime is installed on the host system.`,
-          timeout: false,
-        });
-      });
-    };
-
-    // Compile if necessary, then run
-    if (compileCmd) {
-      const compiler = spawn(compileCmd, compileArgs, { cwd: subDir });
-      let compileErrors = "";
-
-      compiler.stderr.on("data", (data) => {
-        compileErrors += data.toString();
-      });
-
-      compiler.on("close", (code) => {
-        if (code !== 0) {
-          cleanUpDir(subDir);
-          resolve({
-            output: "",
-            error: `Compilation Error:\n${compileErrors}`,
-            timeout: false,
-          });
-        } else {
-          // Compiled successfully, proceed to execution
-          startRunning();
-        }
-      });
-
-      compiler.on("error", (err) => {
-        cleanUpDir(subDir);
-        resolve({
-          output: "",
-          error: `Compiler command error: ${err.message}. Make sure compiler tools (${compileCmd}) are installed.`,
-          timeout: false,
-        });
-      });
-    } else {
-      // Non-compiled language, run immediately
-      startRunning();
-    }
-  });
-};
-
-/**
- * Remove directory recursively
- */
-const cleanUpDir = (dirPath) => {
   try {
-    if (fs.existsSync(dirPath)) {
-      fs.rmSync(dirPath, { recursive: true, force: true });
+    const response = await fetch("https://ce.judge0.com/submissions?wait=true&base64_encoded=false", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        source_code: code,
+        language_id: languageId,
+        stdin: input,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Execution sandbox API returned status ${response.status}`);
     }
+
+    const data = await response.json();
+
+    const stdout = data.stdout || "";
+    const stderr = data.stderr || "";
+    const compileOutput = data.compile_output || "";
+    
+    // Status ID 5 is Time Limit Exceeded (TLE) in Judge0
+    const statusId = data.status?.id;
+    const isTimeout = statusId === 5;
+    
+    let errorMsg = compileOutput || stderr;
+    if (statusId !== 3 && !errorMsg && data.status?.description) {
+      if (statusId !== 1 && statusId !== 2) { // 1 = In Queue, 2 = Processing
+        errorMsg = data.status.description;
+      }
+    }
+
+    return {
+      output: stdout,
+      error: errorMsg,
+      timeout: isTimeout,
+    };
   } catch (err) {
-    console.error("Cleanup error:", err);
+    return {
+      output: "",
+      error: `Code execution service error: ${err.message}`,
+      timeout: false,
+    };
   }
 };
